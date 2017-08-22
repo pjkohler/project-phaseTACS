@@ -1,0 +1,26 @@
+#!/bin/bash
+
+curFolder=$PWD
+
+expFolder=/Volumes/Denali_4D2/kohler/fMRI_EXP/phaseTACS/FIRST
+
+
+cd ${expFolder}
+
+
+for sub in 201708*
+	do
+	echo ${sub}
+	cd ${expFolder}/${sub}/RAW
+	fileList=($(ls run*phaseTACS*.nii.gz))
+	refEpi=${fileList[${#fileList[@]}-1]}
+	refName=${refEpi%%.nii.gz}
+	mriPre.py ${fileList[@]} --ref ${refName}.nii.gz --trdur 2 --tfile ${expFolder}/sliceTiming/mux2_2secs_60total_timing
+	mv run*ts.do.nii.gz ${expFolder}/${sub}/.
+	cd ${expFolder}/${sub}
+	mriVolreg.py run*ts.do.nii.gz --ref ${refName}.ts.do.nii.gz --slow
+	mriScale.py run*vr.nii.gz
+	3dcopy ${refName}.ts.do.vr.nii.gz refEpi.ts.do.vr.nii.gz
+done
+	
+cd ${curFolder}
