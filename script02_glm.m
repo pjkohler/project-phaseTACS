@@ -47,5 +47,6 @@ for s = 1;%1:length(subDirs)
         % remove data field from struct, but save struct for later
         glm_struct{s}{z} = rmfield(glm_struct{s}{z},'data');
     end
+    [results,denoiseddata] = GLMdenoisedata(glm_design{s},glm_data{s},stimDur,trDur,[],[],[],'figures');
 end
 
