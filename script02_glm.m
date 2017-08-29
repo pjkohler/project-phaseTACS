@@ -11,7 +11,7 @@ stimDur = 8;
 subTractTR = 2;
 subTractSecs = subTractTR * trDur;
 
-for s = 1;%1:length(subDirs)
+for s = 1:length(subDirs)
     RTfiles = subfiles(sprintf('%s/stim_data/Exp_MATL_PD1010_1_Cz/RT*',subDirs{s}),1);
     runCount = 0;
     for z=1:length(RTfiles)    
@@ -43,10 +43,18 @@ for s = 1;%1:length(subDirs)
     for z=1:length(dataFiles)
         glm_struct{s}{z} = NIfTI.Read(dataFiles{z});
         % subtract TRs
-        glm_data{s}{z}   = glm_struct{s}{z}.data(subTractTR+1:end);
+        glm_data{s}{z}   = glm_struct{s}{z}.data(:,:,:,subTractTR+1:end);
+        if any(isnan(glm_data{s}{s}(z)))
+            error('glm data cannot have NaNs!');
+        else
+        end
         % remove data field from struct, but save struct for later
         glm_struct{s}{z} = rmfield(glm_struct{s}{z},'data');
     end
-    [results,denoiseddata] = GLMdenoisedata(glm_design{s},glm_data{s},stimDur,trDur,[],[],[],'figures');
+    [glm_results{s},glm_denoiseddata{s}] = GLMdenoisedata(glm_design{s},glm_data{s},stimDur,trDur,[],[],[],'figures');
+    outStruct = glm_struct{s}{z};
+    outStruct.data = cat(4,glm_results{s}.modelmd{2},glm_results{s}.SNR); % get betas and SNR
+    outName = sprintf('%s/glmDenoise_out.nii.gz',subDirs{s});
+    NIfTI.Write(outStruct,outName);
 end
 
