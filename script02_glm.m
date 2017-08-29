@@ -51,7 +51,13 @@ for s = 1:length(subDirs)
         % remove data field from struct, but save struct for later
         glm_struct{s}{z} = rmfield(glm_struct{s}{z},'data');
     end
-    [glm_results{s},glm_denoiseddata{s}] = GLMdenoisedata(glm_design{s},glm_data{s},stimDur,trDur,[],[],[],'figures');
+    denoiseFigDir = sprintf('%s/glmDenoise_figs',subDirs{s});
+    if exist(denoiseFigDir,'dir')
+        rmdir(denoiseFigDir, 's');
+    else
+    end
+    mkdir(denoiseFigDir);
+    [glm_results{s},glm_denoiseddata{s}] = GLMdenoisedata(glm_design{s},glm_data{s},stimDur,trDur,'assume',[],[],denoiseFigDir);
     outStruct = glm_struct{s}{z};
     outStruct.data = cat(4,glm_results{s}.modelmd{2},glm_results{s}.SNR); % get betas and SNR
     outName = sprintf('%s/glmDenoise_out.nii.gz',subDirs{s});
