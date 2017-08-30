@@ -8,7 +8,7 @@ expFolder=/Volumes/Denali_4D2/kohler/fMRI_EXP/phaseTACS/FIRST
 cd ${expFolder}
 
 
-for sub in 201708*
+for sub in 2017*
 	do
 	echo ${sub}
 	cd ${expFolder}/${sub}/RAW
