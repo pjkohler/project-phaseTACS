@@ -1,0 +1,18 @@
+#!/bin/bash
+
+export curDir=${PWD}
+# variable names
+export subID='skeri0004'
+export sumaDir='/Volumes/svndl/anatomy/FREESURFER_SUBS/'${subID}'_fs4/SUMA/'
+export dataDir='/Volumes/Denali_4D2/kohler/fMRI_EXP/phaseTACS/FIRST/20170801_skeri0004'
+export epiName='refEpi.ts.do.vr'
+# navigate to data directory
+
+cd ${dataDir}
+3dcopy ${sumaDir}/${subID}_fs4_SurfVol+orig refAnat+orig
+align_epi_anat.py -anat refAnat+orig -epi ${epiName}.nii.gz -epi_base 5 -anat_has_skull yes -epi_strip 3dSkullStrip -rigid_body -giant_move -volreg off -tshift off
+3dcopy refAnat_al+orig refAnat_al.nii.gz
+@SUMA_AlignToExperiment -exp_anat refAnat_al+orig. -surf_anat ${sumaDir}/${subID}_fs4_SurfVol_ns+orig. -strip_skull none
+rm refAnat*+orig*
+
+cd ${curDir}
