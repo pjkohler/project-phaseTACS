@@ -1,22 +1,29 @@
 clear all
 close all
+codeFolder = '/Users/kohler/code';
+addpath(genpath([codeFolder,'/git/kay']));
 
 dataFolder = '/Volumes/Denali_4D2/kohler/fMRI_EXP/phaseTACS/FIRST';
 subDirs = subfolders(sprintf('%s/2017*',dataFolder),1);
-subDirs = subDirs(1:end-1);
-numConds = 4;
 
+numConds = 4;
+numReps = 5;
 trDur = 2;
 stimDur = 8;
 subTractTR = 2;
 subTractSecs = subTractTR * trDur;
 
 for s = 1:length(subDirs)
+    outName = sprintf('%s/glmDenoise_out.nii.gz',subDirs{s});
+    if exist(outName,'file')
+        continue
+    else
+    end
     RTfiles = subfiles(sprintf('%s/stim_data/Exp_MATL_PD1010_1_Cz/RT*',subDirs{s}),1);
     runCount = 0;
     for z=1:length(RTfiles)    
         tData = load(RTfiles{z});
-        if ~isempty(tData.TimeLine)
+        if length(tData.TimeLine) == (numConds * numReps)
             runCount = runCount + 1;
             tempTimes = cat(1,tData.TimeLine(:).segTimeSec);
             if min(tempTimes) < subTractSecs
@@ -44,7 +51,7 @@ for s = 1:length(subDirs)
         glm_struct{s}{z} = NIfTI.Read(dataFiles{z});
         % subtract TRs
         glm_data{s}{z}   = glm_struct{s}{z}.data(:,:,:,subTractTR+1:end);
-        if any(isnan(glm_data{s}{s}(z)))
+        if any(isnan(glm_data{s}{z}(:)))
             error('glm data cannot have NaNs!');
         else
         end
@@ -60,7 +67,6 @@ for s = 1:length(subDirs)
     [glm_results{s},glm_denoiseddata{s}] = GLMdenoisedata(glm_design{s},glm_data{s},stimDur,trDur,'assume',[],[],denoiseFigDir);
     outStruct = glm_struct{s}{z};
     outStruct.data = cat(4,glm_results{s}.modelmd{2},glm_results{s}.SNR); % get betas and SNR
-    outName = sprintf('%s/glmDenoise_out.nii.gz',subDirs{s});
     NIfTI.Write(outStruct,outName);
 end
 
