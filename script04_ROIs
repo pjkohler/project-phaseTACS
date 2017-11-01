@@ -1,0 +1,33 @@
+#!/bin/bash
+
+export curDir=${PWD}
+# variable names
+export SUB_ID='nl-0032'
+export DATA_DIR='/Volumes/Denali_4D2/kohler/fMRI_EXP/phaseTACS/FIRST/20170829_nl-0032'
+# navigate to data directory
+
+cd ${DATA_DIR}
+
+# generate ROI labels.
+exprStr='amongst(a,1,2)+amongst(a,3,4)*2+amongst(a,5,6)*3+amongst(a,7,8,9,10,11)*(a-3)+amongst(a,13,14,15,16,17,18,19,20,21)*(a-4)+equals(a,24)*18'
+for hemi in rh lh
+	do 
+		rm ${hemi}.wang_atlas_hand.niml.dset
+		echo ${SUBJECTS_DIR}/${SUB_ID}_fs4/
+		3dcopy ${SUBJECTS_DIR}/${SUB_ID}_fs4/wang_atlas/${hemi}.wang_atlas_cluster.niml.dset .
+		3dcalc -a ${hemi}.wang_atlas_cluster.niml.dset -expr $exprStr -prefix ${hemi}.wang_atlas_tacs.niml.dset
+done
+
+# convert ROIs to volume space
+rm *.wang_atlas_tacs.nii.gz
+
+mriSurf2Vol.py ${SUB_ID} rh.wang_atlas_tacs.niml.dset lh.wang_atlas_tacs.niml.dset --mapfunc mode --surfvol ${SUB_ID}_fs4_SurfVol_ns_Alnd_Exp+orig.
+
+3dcalc -a  lh.wang_atlas_tacs.nii.gz -b rh.wang_atlas_tacs.nii.gz -expr '(a + b+notzero(b)*18)*iszero(and(a,b))' -prefix bl.wang_atlas_tacs.nii.gz
+
+3dresample -master glmDenoise.nii.gz -prefix bl.wang_atlas_tacs.rs.nii.gz -inset bl.wang_atlas_tacs.nii.gz	
+
+rm *h.wang_atlas_tacs.nii.gz
+rm bl.wang_atlas_tacs.nii.gz
+
+cd ${curDir}
