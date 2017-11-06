@@ -10,8 +10,10 @@ subDirs = subfolders(sprintf('%s/2017*',dataFolder),1);
 
 overWrite(1) = false;
 overWrite(2) = false;
-createNiftis = false;
+overWrite(3) = false;
+createNiftis = true;
 doRand = false;
+doSplit = true;
 
 includeMotion = false;
 numConds = 4;
@@ -202,106 +204,129 @@ for s = 1:length(subDirs)
 end
 
 %% SPLIT RUN GLMs
-for s = 1:length(subDirs)
-    fprintf('running splits %s\n',subDirs{s});
-    dataFiles = subfiles(sprintf('%s/run*vr.nii.gz',subDirs{s}),1);    
-    % figure out splits
-    set1{1} = 1:2; %combnk(1:length(dataFiles),2);
-    set2 = cellfun(@(x) find(~ismember(1:length(dataFiles),x)),set1,'uni',false)';
-    for z=1:length(dataFiles)
-        glm_struct = NIfTI.Read(dataFiles{z});
-        % subtract TRs
-        numTR = size(glm_struct.data,4);
-        glm_data{z}   = glm_struct.data(:,:,:,subTractTR+1:min(numTR,maxTR));
-        if any(isnan(glm_data{z}(:)))
-            error('glm data cannot have NaNs!');
-        else
+if doSplit
+    for s = 1:length(subDirs)
+        fprintf('running splits %s\n',subDirs{s});
+        dataFiles = subfiles(sprintf('%s/run*vr.nii.gz',subDirs{s}),1);
+        % figure out splits
+        split = combnk(1:length(dataFiles),2);
+        split = arrayfun(@(x) {split(x,:)},1:length(split))';
+        split = [split; cellfun(@(x) find(~ismember(1:length(dataFiles),x)),split,'uni',false)];
+        split = cellfun(@(x) num2str(x), split,'uni',false);
+        split = unique(split);
+        split = cellfun(@(x) str2num(x), split,'uni',false);
+        for z=1:length(dataFiles)
+            glm_struct = NIfTI.Read(dataFiles{z});
+            % subtract TRs
+            numTR = size(glm_struct.data,4);
+            glm_data{z}   = glm_struct.data(:,:,:,subTractTR+1:min(numTR,maxTR));
+            if any(isnan(glm_data{z}(:)))
+                error('glm data cannot have NaNs!');
+            else
+            end
+            clear glm_struct;
         end
-        clear glm_struct;
-    end
-    for z=1:length(set1)
-        splits = {set1{z} set2{z}};
-        for p = 1:length(splits)
-            outName = sprintf('glmSplit_run%s',num2str(splits{p},'%0.0f'));
+        for z=1:length(split)
+            outName = sprintf('glmSplit_run%s',num2str(split{z},'%0.0f'));
             outPath = sprintf('%s/%s',subDirs{s},outName);
             matPath = sprintf('%s.mat',outPath);
             figPath = sprintf('%s_figs',outPath);
-             if exist(figPath,'dir')
-            % if figure directory exists, but not file, delete figure directory
+            if exist(matPath,'file')
+                if ~overWrite(3)
+                    % if file exists, skip subject 
+                    fprintf('skipping glm split %0.0f: %s\n',z,subDirs{s});
+                    continue;
+                else
+                    fprintf('running glm split %0.0f: %s\n',z,subDirs{s});
+                end
+            else
+                fprintf('running glm split %0.0f: %s\n',z,subDirs{s});
+            end
+            if exist(figPath,'dir')
+                % if figure directory exists, but not file, delete figure directory
                 rmdir(figPath, 's');
-             else
+            else
             end
             mkdir(figPath);
             opt.wantparametric = true;
-            ix = splits{p};
+            ix = split{z};
             [glm_results,denoised_data] = GLMdenoisedata(glm_design{s}(ix),glm_data(ix),stimDur,trDur,'assume',hrf,opt,figPath);
             save(matPath,'-struct','glm_results','-v7.3');
             save(matPath,'-append','denoised_data');
         end
+        clear split;
+        clear glm_data;
     end
-    clear glm_data;
+else
 end
 
 %% CREATE NIFTIS
+sets = {'orig','split','individual'};
 if createNiftis
     for s = 1:length(subDirs)
         fprintf('creating niftis %s\n',subDirs{s});
         dataFiles = subfiles(sprintf('%s/run*vr.nii.gz',subDirs{s}),1);
         glm_struct = NIfTI.Read(dataFiles{1});
-        for z=1:(length(dataFiles)+1)
-            outStruct.hdr = glm_struct.hdr;
-            outStruct.method = glm_struct.method;
-            if z > length(dataFiles) 
-                % do all runs
-                outName = 'glmDenoise';
-            else
-                % do individual runs
-                outName = sprintf('glmIndividual_run%0.0f',z);
+        
+        for z=1:length(sets)
+            doSurf = false;
+            switch sets{z}
+                case 'orig'
+                    outName = 'glmDenoise';
+                    doSurf = true;
+                case 'split' 
+                    outName = 'glmSplit';
+                case 'individual'
+                    outName = 'glmIndividual_run';
             end
             outPath = sprintf('%s/%s',subDirs{s},outName);
-            niiPath = sprintf('%s.nii.gz',outPath);
-            matPath = sprintf('%s.mat',outPath);
-            glm_results = load(matPath,'model*','R2','SNR');
-
-            betas = glm_results.modelmd{2};
-            snr = betas./glm_results.modelse{2}; % divide by voxel-wise standard error to get SNR
-            R2 = glm_results.R2./100; % variance explained, divide by 100
-            tempData(:,:,:,1:2:size(betas,4)*2) = betas;
-            tempData(:,:,:,2:2:size(betas,4)*2) = snr;
-            outStruct.data = cat(4,tempData,R2,glm_results.SNR); % betas + beta SNR, R2 and overall SNR
-            outStruct.hdr.dim(5) = size(outStruct.data,4);
-            if exist(niiPath,'file')
-                system(sprintf('rm %s',niiPath));
-            else
-            end
-            NIfTI.Write(outStruct,niiPath);
-            % assign new labels to sub-bricks
-            afniCommand{1} = sprintf(...
-                'source ~/.bashrc; cd %s; 3drefit -fbuc -redo_bstat -relabel_all_str ''beta0 snr0 beta90 snr90 beta180 snr180 beta270 snr270 modelR2 modelSNR'' %s',subDirs{s}, niiPath);
-            % go from volume to surface
-            tempSub = split(subDirs{s},'_');
-            subID = tempSub{end};
-            if strcmp(subID,'nl-0034');
-                subID = 'skeri0004';
-            else
-            end
-            afniCommand{2} = sprintf(...
-                'source ~/.bashrc; cd %s; rm *h.%s.niml.dset; mriVol2Surf.py %s %s.nii.gz --surfvol %s_fs4_SurfVol_ns_Alnd_Exp+orig',subDirs{s},outName,subID,outName,subID);
-            status = system(afniCommand{1});
-            if status == 127
-                error('afni 3drefit command failed!');
-            else
-            end
-            if z > length(dataFiles) 
-                status = system(afniCommand{2});
-                if status == 127
-                    error('afni mriVol2Surf command failed!');
+            matPath = subfiles(sprintf('%s*.mat',outPath),1);
+            for q=1:length(matPath)
+                outStruct.hdr = glm_struct.hdr;
+                outStruct.method = glm_struct.method;
+                [curPath,curName] = fileparts(matPath{q});
+                niiPath = sprintf('%s/%s.nii.gz',curPath,curName);
+                glm_results = load(matPath{q},'model*','R2','SNR');
+                betas = glm_results.modelmd{2};
+                snr = betas./glm_results.modelse{2}; % divide by voxel-wise standard error to get SNR
+                R2 = glm_results.R2./100; % variance explained, divide by 100
+                tempData(:,:,:,1:2:size(betas,4)*2) = betas;
+                tempData(:,:,:,2:2:size(betas,4)*2) = snr;
+                outStruct.data = cat(4,tempData,R2,glm_results.SNR); % betas + beta SNR, R2 and overall SNR
+                outStruct.hdr.dim(5) = size(outStruct.data,4);
+                if exist(niiPath,'file')
+                    system(sprintf('rm %s',niiPath));
                 else
                 end
-            else
+                NIfTI.Write(outStruct,niiPath);
+                % assign new labels to sub-bricks
+                afniCommand{1} = sprintf(...
+                    'source ~/.bashrc; cd %s; 3drefit -fbuc -redo_bstat -relabel_all_str ''beta0 snr0 beta90 snr90 beta180 snr180 beta270 snr270 modelR2 modelSNR'' %s',subDirs{s}, niiPath);
+                % go from volume to surface
+                tempSub = split(subDirs{s},'_');
+                subID = tempSub{end};
+                if strcmp(subID,'nl-0034');
+                    subID = 'skeri0004';
+                else
+                end
+                afniCommand{2} = sprintf(...
+                    'source ~/.bashrc; cd %s; rm *h.%s.niml.dset; mriVol2Surf.py %s %s.nii.gz --surfvol %s_fs4_SurfVol_ns_Alnd_Exp+orig',subDirs{s},outName,subID,outName,subID);
+                status = system(afniCommand{1});
+                if status == 127
+                    error('afni 3drefit command failed!');
+                else
+                end
+                if doSurf
+                    status = system(afniCommand{2});
+                    if status == 127
+                        error('afni mriVol2Surf command failed!');
+                    else
+                    end
+                else
+                end
+                clear tempData;
+                clear outStruct;
             end
-            clear tempData;
-            clear outStruct;
         end
     end
 else
