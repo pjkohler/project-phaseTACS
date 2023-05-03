@@ -15,9 +15,9 @@ function script05_roiStats(useSplits)
     wangROIs = {'V1','V2' 'V3','hV4' 'VO1' 'VO2' 'PHC1' 'PHC2' ...
                 'TO1' 'LO2' 'LO1' 'V3B' 'V3A' 'IPS0' 'IPS1' 'IPS2' 'IPS3' 'SPL1' };
             % note truncated version with only 18 ROIs
-    wangROIs{end+1} = 'all';
+    %wangROIs{end+1} = 'all';
 
-    TOP_DIR='/Volumes/Denali_4D2/kohler/fMRI_EXP/phaseTACS/FIRST';
+    TOP_DIR='/Volumes/science/phaseTACS/FIRST';
     FIG_DIR = sprintf('%s/FIGURES',TOP_DIR);
     
     if ~exist(FIG_DIR,'dir')
@@ -40,9 +40,9 @@ function script05_roiStats(useSplits)
     
     for s=1:length(SUB_DIR);
         disp(['Reading ',SUB_DIR{s},' ...']);
-        curROI = subfiles(sprintf('%s/bl.wang_atlas_tacs.rs.nii.gz',SUB_DIR{s}),1);
-        curDATA = subfiles(sprintf('%s/glmDenoise.nii.gz',SUB_DIR{s}),1);
-        tmpData = mriRoiExtract(curDATA,curROI);
+        curROI = sprintf('%s/bl.wang_atlas_tacs.rs.nii.gz',SUB_DIR{s});
+        curDATA = sprintf('%s/glmDenoise.nii.gz',SUB_DIR{s});
+        tmpData =  mymri.RoiExtract(curDATA,curROI);
         roiData(:,:,1,s) = reshape(tmpData,length(wangROIs),2);
         if useSplits
             splitData = subfiles(sprintf('%s/glmSplit*.nii.gz',SUB_DIR{s}),1);
@@ -51,7 +51,7 @@ function script05_roiStats(useSplits)
         end
         numSplits(s) = length(splitData);
         for z=1:numSplits(s)
-            tmpData = mriRoiExtract(splitData{z},curROI);
+            tmpData = mymri.RoiExtract(splitData{z},curROI);
             roiData(:,:,z+1,s) = reshape(tmpData,length(wangROIs),2);
         end
     end
@@ -94,7 +94,7 @@ function script05_roiStats(useSplits)
     fontSize = 12;
     condLabels = {'-90','0','90','180'};
     lWidth = 2;
-    gcaOpts = {'tickdir','out','box','off','fontsize',fontSize,'fontname','Helvetica','linewidth',lWidth,'ticklength',[.03,.03]};
+    gcaOpts = {'tickdir','out','box','off','fontsize',fontSize,'fontname','Helvetica','linewidth',lWidth,'ticklength',[.1,.1]};
     roisToPlot = [1,2,3];
     for s=1:length(SUB_DIR);
         switch split_string(sesNames{s},'_',2)
@@ -120,6 +120,13 @@ function script05_roiStats(useSplits)
             for h = 1:2
                 subplot(length(roisToPlot),2,h+(r-1)*2);
                 hold on
+                if h == 2
+                    % average over left and right hemisphere
+                    plot_data(:, r, s) = (roiMeanSelect{r,1,1,s}(:,dataIdx) + roiMeanSelect{r,2,1,s}(:,dataIdx))./2;
+                    split_data1(:, r, s) = (roiMeanSelect{r,1,2,s}(:,dataIdx) + roiMeanSelect{r,2,2,s}(:,dataIdx))./2;
+                    split_data2(:, r, s) = (roiMeanSelect{r,1,3,s}(:,dataIdx) + roiMeanSelect{r,2,3,s}(:,dataIdx))./2;
+                else
+                end
                 pH(h) = plot(1:4,roiMeanSelect{r,h,1,s}(:,dataIdx),sprintf('-%so',colors{h}),'linewidth',2);
                 arrayfun(@(x) plot(1:4,roiMeanSelect{r,h,x,s}(:,dataIdx),sprintf('--%so',colors{h}),'linewidth',1),2:numSplits(s)+1);
                 hold off;
@@ -149,7 +156,42 @@ function script05_roiStats(useSplits)
         export_fig(figName,'-pdf','-transparent',gcf);
     end
 
-
+    %% SUMMARY PLOTS
+    close all
+    for r = 1:3
+        figure;
+        for s = 1:length(SUB_DIR)
+            row_idx = find(ismember(montLabels, montageObj(sesNames{s})));
+            disp(row_idx)
+            subplot(3,4,(row_idx-1)*4+subIdx(s));
+            hold on;
+            plot(1:4, plot_data(:,r,s),sprintf('-%so',colors{h}),'linewidth',2);
+            %plot(1:4, split_data1(:,r,s),sprintf('--%s',colors{h}),'linewidth',2);
+            %plot(1:4, split_data2(:,r,s),sprintf('--%s',colors{h}),'linewidth',2);
+            if  (subIdx(s) == 1)
+                ylabel(montageObj(sesNames{s}), 'fontsize',fontSize,'fontname','helvetica');
+                if (row_idx == 3)
+                    xlabel({'phase delay'; '(relative to visual stimulus)'},'fontsize',fontSize,'fontname','helvetica');
+                else 
+                end
+            else
+            end
+            if row_idx == 1
+                title(sprintf('subject: %s', subLabels{subIdx(s)}), 'fontweight', 'normal');
+            else
+            end
+            set(gca,gcaOpts{:},'xtick',1:4,'ytick',0:1:4, 'xticklabel',condLabels, 'clipping', 'off');
+            ylim([0,4]);
+            xlim([.5,4.5]);
+            hold off
+        end
+        figName = sprintf('%s/beta_summary_v%d.pdf',FIG_DIR, r);
+        export_fig(figName,'-pdf','-transparent',gcf);
+    end
+    
+%%
+    
+    
 %     %% CORR PLOTS
 %     figure;
 %     condColor = {'bo','ro','go','mao'};
@@ -173,6 +215,8 @@ function script05_roiStats(useSplits)
 %     curPos(4) = 40;
 %     set(gcf,'position',curPos);
 
+    %% COMBINED PLOT
+    
 
 
     %% CLASSIFICATION
